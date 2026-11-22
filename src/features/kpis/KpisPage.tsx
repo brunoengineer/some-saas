@@ -12,6 +12,7 @@ import { cap, formatDelta, formatValue, PLATFORM_LABEL, targetLabel } from '@/li
 import { isTracked, kpiValue, lastDataDate, onDashboard, pacing, sourceLabel, statusOf, targetAt } from '@/lib/metrics';
 import { periodFor, periodLabel, periodsEnding, shiftPeriod, toDate, type Period } from '@/lib/period';
 import { blankKpi, KpiEditor } from './KpiEditor';
+import { DailyNumbers } from './DailyNumbers';
 import { KpiHistory } from './KpiHistory';
 
 export const GROUP_LABEL: Record<KpiGroup, string> = {
@@ -21,7 +22,7 @@ export const GROUP_LABEL: Record<KpiGroup, string> = {
   other: 'Other KPIs',
 };
 const GROUPS: KpiGroup[] = ['weekly', 'daily', 'headline', 'other'];
-type Tab = 'overview' | 'enter' | 'definitions';
+type Tab = 'overview' | 'enter' | 'daily' | 'definitions';
 export type Cadence = 'weekly' | 'monthly';
 
 /** Is this KPI judged / entered in weekly or in monthly periods? */
@@ -74,7 +75,7 @@ function PeriodPicker({ p }: { p: ReturnType<typeof usePeriodPicker> }) {
 export function KpisPage() {
   const [params, setParams] = useSearchParams();
   const raw = params.get('tab');
-  const tab: Tab = raw === 'definitions' || raw === 'enter' ? raw : 'overview';
+  const tab: Tab = raw === 'definitions' || raw === 'enter' || raw === 'daily' ? raw : 'overview';
   const { can, ws, data } = useSession();
   const [editing, setEditing] = useState<{ k: Kpi; isNew: boolean } | null>(null);
   const manualCount = data.kpis.filter((k) => k.source === 'manual').length;
@@ -106,11 +107,13 @@ export function KpisPage() {
         options={[
           { value: 'overview', label: 'Overview' },
           { value: 'enter', label: `Enter results (${manualCount})` },
+          { value: 'daily', label: 'Daily numbers' },
           { value: 'definitions', label: 'Definitions & targets' },
         ]}
       />
       {tab === 'overview' && <Overview onEnter={() => setParams({ tab: 'enter' })} />}
       {tab === 'enter' && <EnterResults />}
+      {tab === 'daily' && <DailyNumbers />}
       {tab === 'definitions' && <Definitions onEdit={(k) => setEditing({ k, isNew: false })} />}
       {editing && <KpiEditor kpi={editing.k} isNew={editing.isNew} onClose={() => setEditing(null)} />}
     </div>
@@ -124,11 +127,14 @@ interface Row {
   trend: (number | null)[];
   status: Status;
   missing: boolean;
+  /** A calculated KPI whose value for this period was typed in by hand. */
+  edited: boolean;
 }
 
 function rowFor(k: Kpi, data: WsData, period: Period, weekStartsOn: 0 | 1): Row {
   const periods = periodsEnding(period, 8, weekStartsOn);
-  const trend = periods.map((p) => kpiValue(k, data, p).value);
+  const results = periods.map((p) => kpiValue(k, data, p));
+  const trend = results.map((r) => r.value);
   const value = trend[trend.length - 1];
   const prev = trend[trend.length - 2];
   return {
@@ -138,6 +144,7 @@ function rowFor(k: Kpi, data: WsData, period: Period, weekStartsOn: 0 | 1): Row 
     trend,
     // Only judge a KPI in the period length it is reported in.
     status: kpiCadence(k) === (period.type === 'month' ? 'monthly' : 'weekly') ? statusOf(k, value, prev, targetAt(k, period.end)) : 'none',
+    edited: !!results[results.length - 1].edited,
     missing: k.source === 'manual' && kpiCadence(k) === (period.type === 'month' ? 'monthly' : 'weekly') && k.cadence !== 'once' && value === null,
   };
 }
@@ -282,7 +289,10 @@ function Overview({ onEnter }: { onEnter: () => void }) {
                         <span className="text-[13px] font-normal text-muted">Not entered</span>
                       )
                     ) : (
-                      formatValue(r.k.unit, r.value, { signed: r.k.calc === 'netFollowers' })
+                      <span className="inline-flex items-center gap-1.5" title={r.edited ? 'Edited by hand for this period' : undefined}>
+                        {r.edited && <Pencil size={12} className="text-accent" aria-label="Edited by hand" />}
+                        {formatValue(r.k.unit, r.value, { signed: r.k.calc === 'netFollowers' })}
+                      </span>
                     )}
                   </td>
                   <td className="tabular hidden px-3 py-2.5 text-[12.5px] whitespace-nowrap sm:table-cell">
@@ -437,7 +447,7 @@ function EnterResults() {
 
       <Card
         title={`Results to enter for ${periodLabel(p)}`}
-        subtitle={`Only the ${manual.length} ${picker.cadence} KPIs entered by hand are listed. ${calculated} others are calculated from posts, channel stats and partner deliverables.`}
+        subtitle={`Only the ${manual.length} ${picker.cadence} KPIs entered by hand are listed. ${calculated} others are calculated from posts, channel stats and partner deliverables: correct those in Daily numbers, or click one in Overview to type over a week or month.`}
       >
         {!editable && <p className="mb-2 rounded-lg bg-surface-2 px-3 py-2 text-[13px] text-muted">Only admins enter results. You can see what has been entered.</p>}
         {regular.length === 0 ? (

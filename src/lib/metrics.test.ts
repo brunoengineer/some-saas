@@ -3,7 +3,7 @@ import { buildSeed } from '@/data/seed';
 import { FLUSH } from '@/data/seed/flush';
 import { wsData } from '@/data/wsData';
 import { formatDelta } from './format';
-import { calcValue, kpiValue, NO_FILTERS, partnerRows, pillarStats, topPosts, totalsFor } from './metrics';
+import { calculatedValue, calcValue, kpiValue, NO_FILTERS, partnerRows, pillarStats, topPosts, totalsFor } from './metrics';
 import { periodFor, previousPeriod, type Period } from './period';
 import { buildSnapshot } from './report';
 
@@ -137,5 +137,21 @@ describe('Discord sync KPIs', () => {
     expect(week).toMatchObject({ start: '2026-11-23', end: '2026-11-29' });
     // Cohorts from 16-22 Nov: the 17th and 18th (12 of 20).
     expect(calcValue('retention7', synced, week, NO_FILTERS, 'discord')).toBe(60);
+  });
+});
+
+describe('calculated KPIs corrected by hand', () => {
+  const k = kpi('k-netf');
+  const corrected = { ...d, kpiEntries: [...d.kpiEntries, { id: 'o', wsId: FLUSH, kpiId: k.id, periodStart: week4.start, cadence: 'weekly' as const, value: 200, note: 'X recount', source: 'manual' as const }] };
+
+  it('uses the typed value for that exact week, and says so', () => {
+    expect(kpiValue(k, corrected, week4)).toMatchObject({ value: 200, edited: true });
+    expect(calculatedValue(k, corrected, week4)).toBe(186);
+  });
+
+  it('keeps calculating other periods and filtered views', () => {
+    expect(kpiValue(k, corrected, previousPeriod(week4)).edited).toBeFalsy();
+    expect(kpiValue(k, corrected, month1).value).toBe(kpiValue(k, d, month1).value);
+    expect(kpiValue(k, corrected, week4, { ...NO_FILTERS, campaignId: 'c-draw' }).edited).toBeFalsy();
   });
 });

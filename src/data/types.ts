@@ -278,7 +278,14 @@ export interface DailyStat {
   cohortSize?: number | null;
   /** Discord sync: of those, how many were still in the server 7 days later. */
   retained7?: number | null;
+  /** Fields corrected by hand. The sync script keeps these instead of overwriting them. */
+  manualFields?: StatField[];
+  editedBy?: string | null;
+  editedAt?: string | null;
 }
+
+/** The numbers of a DailyStat that can be corrected by hand. */
+export type StatField = 'followers' | 'members' | 'joins' | 'leaves' | 'messages' | 'profileVisits' | 'clicks' | 'active' | 'active7' | 'online' | 'cohortSize' | 'retained7';
 
 /** Where a workspace's numbers can be fetched from automatically (see docs/discord.md). */
 export interface Integrations {

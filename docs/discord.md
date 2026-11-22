@@ -143,7 +143,17 @@ In **KPIs & Goals → Definitions**, edit each KPI (or add it from **Templates**
 | Weekly active members | Calculated | Members who posted in the last 7 days ÷ members (Discord sync) |
 | 7-day retention | Calculated | Newcomers still in the server 7 days after joining (Discord sync) |
 
-Set the KPI's platform to **Discord**. Old hand-entered values stay in the history.
+Set the KPI's platform to **Discord**. Old hand-entered values stay in the history, as hand corrections of those weeks. Prefer to keep typing a KPI in yourself? Leave it as entered by hand: the sync doesn't touch it.
+
+## Correcting numbers by hand
+
+Everything the sync brings in can be changed by hand at any time, and the button never overwrites what you corrected:
+
+- **One day's numbers:** go to **KPIs & Goals → Daily numbers**, pick Discord and the week, and click **Edit** on a day. You can change members, new members by source, leavers, messages, people who posted, and the retention counts. Days without numbers have **Add**. Changed fields get a pencil mark and are **kept** the next time someone presses Update data. To let updates fill a field again, open the day and click **Let updates replace my edits**.
+- **A KPI's whole week or month:** in **KPIs & Goals → Overview**, click a calculated KPI (e.g. weekly active members). In its history, type a value for that week or month. The typed value replaces the calculation for that period, and the calculated one is shown under it. Clear the box to go back. Overridden values show a pencil mark in the Overview.
+- **KPIs entered by hand** stay exactly as before (Enter results). A KPI doesn't have to be switched to calculated at all.
+
+Only admins can correct numbers (the same as entering results).
 
 ## What each number means
 

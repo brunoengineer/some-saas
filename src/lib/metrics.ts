@@ -243,9 +243,29 @@ export interface KpiResult {
   value: number | null;
   /** False when the value is account-wide and ignores campaign/pillar/partner filters. */
   scoped: boolean;
+  /** A calculated or formula KPI whose value for this period was typed in by hand. */
+  edited?: boolean;
+}
+
+/**
+ * A value typed in by hand for a calculated or formula KPI: it replaces the
+ * calculation for exactly that week or month (not when filters are on).
+ */
+export function kpiOverride(kpi: Kpi, d: WsData, p: Period, f: Filters = NO_FILTERS): KpiEntry | null {
+  if (kpi.source === 'manual' || (p.type !== 'week' && p.type !== 'month')) return null;
+  if (f.platform || f.campaignId || f.pillarId || f.partnerId) return null;
+  const cadence = p.type === 'week' ? 'weekly' : 'monthly';
+  return d.kpiEntries.find((e) => e.kpiId === kpi.id && e.periodStart === p.start && e.cadence === cadence) ?? null;
+}
+
+/** What the calculation gives, ignoring any value typed in by hand. */
+export function calculatedValue(kpi: Kpi, d: WsData, p: Period): number | null {
+  return kpiValue(kpi, { ...d, kpiEntries: d.kpiEntries.filter((e) => e.kpiId !== kpi.id) }, p).value;
 }
 
 export function kpiValue(kpi: Kpi, d: WsData, p: Period, f: Filters = NO_FILTERS, depth = 0): KpiResult {
+  const override = kpiOverride(kpi, d, p, f);
+  if (override) return { value: override.value, scoped: false, edited: true };
   if (kpi.source === 'calc') {
     if (!kpi.calc) return { value: null, scoped: false };
     return { value: calcValue(kpi.calc, d, p, f, kpi.platform), scoped: SCOPED[kpi.calc] };

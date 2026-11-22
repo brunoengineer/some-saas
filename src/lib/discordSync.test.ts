@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, applyDiscordRun, capCounts, dayIn, interleave, inviteCode, NOT_TRACKED, OTHER_SOURCE, snowflakeAt, snowflakeTime, type DiscordSnapshot } from './discordSync';
+import { addDays, applyDiscordRun, capCounts, dayIn, interleave, inviteCode, keepManualEdits, NOT_TRACKED, OTHER_SOURCE, snowflakeAt, snowflakeTime, type DiscordSnapshot } from './discordSync';
 
 const TZ = 'America/Toronto';
 const at = (day: string, hour = 15) => `${day}T${String(hour).padStart(2, '0')}:00:00.000Z`;
@@ -129,5 +129,23 @@ describe('applyDiscordRun', () => {
     const last = rows.find((r) => r.date === '2026-11-17')!;
     expect(last.active).toBe(2);
     expect(last.active7).toBe(3);
+  });
+});
+
+describe('keepManualEdits', () => {
+  const row = { platform: 'discord' as const, date: '2026-11-23', followers: null, members: 410, clicks: {}, joins: { 'X bio': 3 }, leaves: 1, profileVisits: 0, messages: 900, active: 80, active7: 150, online: 40, cohortSize: null, retained7: null };
+
+  it('keeps fields corrected by hand and overwrites the rest', () => {
+    const out = keepManualEdits(row, { members: 999, messages: 5, joins: { Creators: 7 }, manualFields: ['members', 'joins'], editedBy: 'a@b.c', editedAt: '2026-11-23T10:00' });
+    expect(out.members).toBe(999);
+    expect(out.joins).toEqual({ Creators: 7 });
+    expect(out.messages).toBe(900);
+    expect(out.manualFields).toEqual(['members', 'joins']);
+    expect(out.editedBy).toBe('a@b.c');
+  });
+
+  it('leaves rows without hand edits as synced', () => {
+    expect(keepManualEdits(row, undefined)).toBe(row);
+    expect(keepManualEdits(row, { members: 1, manualFields: [] })).toBe(row);
   });
 });

@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
+import { Pencil } from 'lucide-react';
 import { useActions } from '@/app/actions';
 import { useSession } from '@/app/session';
 import { Columns } from '@/components/charts';
 import { Badge, Button, Drawer, Input, Segmented, StatusPill } from '@/components/ui';
 import type { Kpi, KpiEntry } from '@/data/types';
 import { formatDelta, formatValue, PLATFORM_LABEL, targetLabel } from '@/lib/format';
-import { sourceLabel, kpiValue, lastDataDate, statusOf, targetAt } from '@/lib/metrics';
+import { calculatedValue, sourceLabel, kpiValue, lastDataDate, statusOf, targetAt } from '@/lib/metrics';
 import { periodLabel, periodsEnding, toDate } from '@/lib/period';
 import { kpiCadence, periodOf, type Cadence } from './KpisPage';
 
@@ -24,7 +25,9 @@ export function KpiHistory({ kpi, onClose }: { kpi: Kpi; onClose: () => void }) 
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const last = lastDataDate(data);
   const latest = last && last < today ? last : today;
-  const editable = can('kpi.enter') && kpi.source === 'manual' && cadence === kpiCadence(kpi);
+  // Hand-entered KPIs are typed in; calculated ones can be corrected (the typed value replaces the calculation).
+  const editable = can('kpi.enter') && cadence === kpiCadence(kpi);
+  const calculated = kpi.source !== 'manual';
 
   const firstData = useMemo(() => {
     const dates = [...data.stats.map((s) => s.date), ...data.kpiEntries.filter((e) => e.kpiId === kpi.id).map((e) => e.periodStart)];
@@ -41,7 +44,8 @@ export function KpiHistory({ kpi, onClose }: { kpi: Kpi; onClose: () => void }) 
     const prev = prevP ? kpiValue(kpi, data, prevP).value : null;
     const entry = data.kpiEntries.find((e) => e.kpiId === kpi.id && e.periodStart === p.start) ?? null;
     const target = targetAt(kpi, p.end);
-    return { p, value, prev, entry, target, status: cadence === kpiCadence(kpi) ? statusOf(kpi, value, prev, target) : ('none' as const) };
+    const calc = calculated ? calculatedValue(kpi, data, p) : null;
+    return { p, value, prev, entry, calc, target, status: cadence === kpiCadence(kpi) ? statusOf(kpi, value, prev, target) : ('none' as const) };
   });
   const chart = [...rows]
     .reverse()
@@ -82,7 +86,13 @@ export function KpiHistory({ kpi, onClose }: { kpi: Kpi; onClose: () => void }) 
       footer={
         editable ? (
           <>
-            <span className="mr-auto text-[13px] text-muted">{changed.length ? `${changed.length} unsaved change(s)` : 'Edit any past value, then save.'}</span>
+            <span className="mr-auto text-[13px] text-muted">
+              {changed.length
+                ? `${changed.length} unsaved change(s)`
+                : calculated
+                  ? 'Type a value to replace the calculation.'
+                  : 'Edit any past value, then save.'}
+            </span>
             <Button disabled={!changed.length} onClick={() => setDrafts({})}>
               Discard
             </Button>
@@ -139,16 +149,23 @@ export function KpiHistory({ kpi, onClose }: { kpi: Kpi; onClose: () => void }) 
                   </td>
                   <td className="tabular py-1.5 text-right">
                     {editable ? (
-                      <Input
-                        aria-label={`${kpi.name}, ${periodLabel(r.p)}`}
-                        inputMode="decimal"
-                        value={drafts[r.p.start] ?? (r.entry ? String(r.entry.value) : '')}
-                        onChange={(e) => setDrafts({ ...drafts, [r.p.start]: e.target.value })}
-                        placeholder="—"
-                        className="tabular ml-auto h-8 w-24 text-right"
-                      />
+                      <>
+                        <Input
+                          aria-label={`${kpi.name}, ${periodLabel(r.p)}`}
+                          inputMode="decimal"
+                          value={drafts[r.p.start] ?? (r.entry ? String(r.entry.value) : '')}
+                          onChange={(e) => setDrafts({ ...drafts, [r.p.start]: e.target.value })}
+                          placeholder={calculated ? formatValue(kpi.unit, r.calc) : '—'}
+                          title={calculated ? 'Leave empty to use the calculated value' : undefined}
+                          className="tabular ml-auto h-8 w-24 text-right"
+                        />
+                        {calculated && r.entry && <span className="mt-0.5 block text-[11.5px] text-muted">Calculated: {formatValue(kpi.unit, r.calc)}</span>}
+                      </>
                     ) : (
-                      formatValue(kpi.unit, r.value)
+                      <span className="inline-flex items-center gap-1">
+                        {calculated && r.entry && <Pencil size={11} className="text-accent" aria-label="Edited by hand" />}
+                        {formatValue(kpi.unit, r.value)}
+                      </span>
                     )}
                   </td>
                   <td className="tabular py-2 pl-3 text-[12.5px] whitespace-nowrap text-muted">{d ? `${d.dir === 'up' ? '▲' : d.dir === 'down' ? '▼' : '='} ${d.text}` : ''}</td>

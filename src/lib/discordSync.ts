@@ -277,3 +277,15 @@ export function applyDiscordRun(prev: DiscordState | null, snap: DiscordSnapshot
   };
   return { state, rows, summary, warnings };
 }
+
+/**
+ * A synced row, except the fields someone corrected by hand (`manualFields` on the
+ * stored row): those keep the hand-entered value, and stay marked as edited.
+ */
+export function keepManualEdits(row: DiscordStatRow, existing: Partial<DailyStat> | undefined): DiscordStatRow {
+  const fields = existing?.manualFields ?? [];
+  if (!existing || !fields.length) return row;
+  const out: Record<string, unknown> = { ...row, manualFields: fields, editedBy: existing.editedBy ?? null, editedAt: existing.editedAt ?? null };
+  for (const f of fields) if (f in existing) out[f] = existing[f];
+  return out as DiscordStatRow;
+}

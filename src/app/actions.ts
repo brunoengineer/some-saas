@@ -160,6 +160,12 @@ export function useActions() {
       for (const r of removals) fire(repo.remove('kpiEntries', r.id));
       log(`entered ${upserts.length + removals.length} result(s) for ${label}`, '/kpis?tab=enter');
     },
+    /** One day of channel numbers corrected by hand (KPIs & Goals → Daily numbers). */
+    saveStat(stat: DailyStat, label: string) {
+      need('kpi.enter', 'edit daily numbers');
+      fire(repo.upsert('stats', stat));
+      log(`edited the ${label} numbers`, '/kpis?tab=daily');
+    },
     importRows(rows: { stats?: DailyStat[]; entries?: KpiEntry[]; posts?: Post[] }, label: string) {
       need('kpi.enter', 'import data');
       if (rows.stats) fire(repo.upsertMany('stats', rows.stats));

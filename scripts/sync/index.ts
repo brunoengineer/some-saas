@@ -8,8 +8,8 @@ import { readFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { cert, initializeApp } from 'firebase-admin/app';
 import { getFirestore, type DocumentReference } from 'firebase-admin/firestore';
-import type { Partner, SyncState, Workspace } from '../../src/data/types.ts';
-import { applyDiscordRun, inviteCode, newerId, type DiscordState } from '../../src/lib/discordSync.ts';
+import type { DailyStat, Partner, SyncState, Workspace } from '../../src/data/types.ts';
+import { applyDiscordRun, inviteCode, keepManualEdits, newerId, type DiscordState } from '../../src/lib/discordSync.ts';
 import { explain, fetchDiscord } from './discord.ts';
 
 const args = process.argv.slice(2);
@@ -76,11 +76,14 @@ async function syncDiscord(ws: Workspace): Promise<string> {
   });
   for (const [ch, id] of Object.entries(fetched.cursors)) state.lastMessageIds[ch] = newerId(state.lastMessageIds[ch], id);
 
+  // Numbers someone corrected by hand in Pulse (KPIs & Goals → Daily numbers) are kept.
+  const refs = rows.map((row) => db.doc(`workspaces/${ws.id}/stats/${ws.id}_discord_${row.date}`));
+  const existing = refs.length ? await db.getAll(...refs) : [];
   const batch = db.batch();
-  for (const row of rows) {
-    const id = `${ws.id}_discord_${row.date}`;
-    batch.set(db.doc(`workspaces/${ws.id}/stats/${id}`), { id, wsId: ws.id, ...row });
-  }
+  rows.forEach((row, i) => {
+    const kept = keepManualEdits(row, existing[i]?.exists ? (existing[i].data() as Partial<DailyStat>) : undefined);
+    batch.set(refs[i], { id: refs[i].id, wsId: ws.id, ...kept });
+  });
   const { members, ...rest } = state;
   batch.set(stateRef(ws.id), rest);
   batch.set(membersRef(ws.id), { members });
