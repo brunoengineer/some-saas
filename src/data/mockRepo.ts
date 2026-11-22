@@ -39,7 +39,7 @@ export function createMockRepo(): Repo {
     listeners.forEach((l) => l());
   };
 
-  const upsertMany = <C extends Collection>(collection: C, items: Item<C>[]) => {
+  const upsertMany = async <C extends Collection>(collection: C, items: Item<C>[]) => {
     if (items.length === 0) return;
     const list = db[collection] as Item<C>[];
     const byId = new Map(items.map((i) => [i.id, i]));
@@ -57,14 +57,14 @@ export function createMockRepo(): Repo {
     },
     upsert: (collection, item) => upsertMany(collection, [item]),
     upsertMany,
-    remove(collection, id) {
+    async remove(collection, id) {
       const list = db[collection] as { id: string }[];
       commit({ ...db, [collection]: list.filter((x) => x.id !== id) });
     },
     reset() {
       commit(buildSeed());
     },
+    isReady: () => true,
+    loadImage: async (post) => post.image ?? null,
   };
 }
-
-export const repo: Repo = createMockRepo();

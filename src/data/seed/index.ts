@@ -6,11 +6,11 @@ import { flushSeed, FLUSH } from './flush';
 import { withSampleImages } from './images';
 
 /** Bump when the sample data changes so browsers reload it. */
-export const SEED_VERSION = 4;
+export const SEED_VERSION = 5;
 
 function flushReports(db: DB): Report[] {
   const d = wsData(db, FLUSH);
-  const w3 = createReport(d, { type: 'weekly', period: { type: 'week', start: '2026-11-02', end: '2026-11-08' }, campaignId: null, trigger: 'auto', createdBy: 'scheduler', now: '2026-11-09T08:00' });
+  const w3 = createReport(d, { type: 'weekly', period: { type: 'week', start: '2026-11-02', end: '2026-11-08' }, campaignId: null, trigger: 'manual', createdBy: 'm-brunna', now: '2026-11-09T08:00' });
   w3.id = 'r-w3';
   w3.status = 'final';
   w3.narrative = {
@@ -24,7 +24,7 @@ function flushReports(db: DB): Report[] {
     footnote: w3.narrative.footnote,
   };
 
-  const w4 = createReport(d, { type: 'weekly', period: { type: 'week', start: '2026-11-09', end: '2026-11-15' }, campaignId: null, trigger: 'auto', createdBy: 'scheduler', now: '2026-11-16T08:00' });
+  const w4 = createReport(d, { type: 'weekly', period: { type: 'week', start: '2026-11-09', end: '2026-11-15' }, campaignId: null, trigger: 'manual', createdBy: 'm-brunna', now: '2026-11-16T08:00' });
   w4.id = 'r-w4';
   w4.status = 'final';
   w4.narrative = {
@@ -65,7 +65,7 @@ export function buildSeed(): DB {
   const activity: Activity[] = [
     { id: 'a1', wsId: FLUSH, at: '2026-11-21T10:12', actorId: 'm-alex', text: 'requested changes on “Founding Tournament: entries open”', link: '/calendar?post=fp-tourney-launch' },
     { id: 'a2', wsId: FLUSH, at: '2026-11-20T16:05', actorId: 'm-jordan', text: 'commented on Founding Tournament', link: '/campaigns/c-tourney' },
-    { id: 'a3', wsId: FLUSH, at: '2026-11-16T08:00', actorId: 'scheduler', text: 'generated the weekly report for 9–15 Nov', link: '/reports/r-w4' },
+    { id: 'a3', wsId: FLUSH, at: '2026-11-16T08:00', actorId: 'm-brunna', text: 'generated the weekly report for 9–15 Nov', link: '/reports/r-w4' },
   ];
   const db: DB = {
     version: SEED_VERSION,

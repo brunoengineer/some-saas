@@ -6,7 +6,6 @@ import { formatDelta } from './format';
 import { calcValue, kpiValue, NO_FILTERS, partnerRows, pillarStats, topPosts, totalsFor } from './metrics';
 import { periodFor, previousPeriod, type Period } from './period';
 import { buildSnapshot } from './report';
-import { dueRuns } from './scheduler';
 
 // The Flush sample data must reproduce the proposal's example report.
 const db = buildSeed();
@@ -91,16 +90,6 @@ describe('filters and partners', () => {
   });
 });
 
-describe('scheduler', () => {
-  it('runs the weekly report on Monday morning for the previous week, once', () => {
-    expect(dueRuns(d.ws, new Date(2026, 10, 22, 12, 0))).toEqual([]);
-    const runs = dueRuns(d.ws, new Date(2026, 10, 23, 8, 5));
-    expect(runs).toHaveLength(1);
-    expect(runs[0].period).toMatchObject({ start: '2026-11-16', end: '2026-11-22' });
-    const monthly = dueRuns(d.ws, new Date(2026, 11, 1, 9, 0)).find((r) => r.kind === 'monthly');
-    expect(monthly?.period).toMatchObject({ start: '2026-11-01', end: '2026-11-30' });
-  });
-});
 
 describe('pillar stats', () => {
   it('splits month 1 across the five pillars', () => {

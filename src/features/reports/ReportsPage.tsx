@@ -1,38 +1,29 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { CalendarClock, Plus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Plus } from 'lucide-react';
 import { nowStamp, useActions } from '@/app/actions';
 import { useMemberName, useSession } from '@/app/session';
 import { DataTable } from '@/components/DataTable';
-import { Badge, Button, Card, Field, Input, Modal, PageHeader, Segmented, Select, Toggle } from '@/components/ui';
+import { Badge, Button, Card, Field, Input, Modal, PageHeader, Segmented, Select } from '@/components/ui';
 import type { Report, ReportType } from '@/data/types';
 import { dateTimeLabel } from '@/lib/format';
 import { lastDataDate } from '@/lib/metrics';
-import { iso, periodFor, periodLabel, rangeLabel, type Period } from '@/lib/period';
+import { periodFor, periodLabel, rangeLabel, type Period } from '@/lib/period';
 import { createReport, REPORT_TYPE_LABEL } from '@/lib/report';
-import { lastSlot, nextSlot, slotLabel } from '@/lib/scheduler';
 
 export function ReportsPage() {
-  const { data, ws, can } = useSession();
-  const actions = useActions();
+  const { data, can } = useSession();
   const navigate = useNavigate();
   const name = useMemberName();
   const [type, setType] = useState<'all' | ReportType>('all');
   const [generating, setGenerating] = useState(false);
   const rows = data.reports.filter((r) => type === 'all' || r.type === type);
 
-  const toggle = (kind: 'weekly' | 'monthly', enabled: boolean) => {
-    const s = ws.schedules[kind];
-    // Turning a schedule on starts from the next slot; it doesn't backfill.
-    const lastRun = enabled ? `${iso(lastSlot(kind, s, new Date()))}T${s.time}` : s.lastRun;
-    actions.saveWorkspace({ ...ws, schedules: { ...ws.schedules, [kind]: { ...s, enabled, lastRun } } }, `${kind} auto reports ${enabled ? 'on' : 'off'}`);
-  };
-
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
         title="Reports"
-        subtitle="Weekly and monthly reports are created automatically. Generate any other report by hand."
+        subtitle="Generate a weekly, monthly, campaign or custom report when you need one. Numbers are frozen when it’s generated."
         actions={
           can('report.generate') && (
             <Button variant="primary" icon={<Plus size={15} />} onClick={() => setGenerating(true)}>
@@ -41,7 +32,7 @@ export function ReportsPage() {
           )
         }
       />
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="flex flex-col gap-3">
         <Card>
           <div className="mb-3">
             <Segmented
@@ -78,34 +69,11 @@ export function ReportsPage() {
               },
               { key: 'type', label: 'Type', render: (r) => <Badge>{REPORT_TYPE_LABEL[r.type]}</Badge>, sort: (r) => r.type },
               { key: 'period', label: 'Period', render: (r) => <span className="whitespace-nowrap text-soft">{rangeLabel(r.start, r.end)}</span>, sort: (r) => r.start },
-              { key: 'trigger', label: 'Created', render: (r) => <span className="whitespace-nowrap text-muted">{r.trigger === 'auto' ? 'Auto' : name(r.createdBy)}</span> },
+              { key: 'trigger', label: 'Created', render: (r) => <span className="whitespace-nowrap text-muted">{name(r.createdBy)}</span> },
               { key: 'status', label: 'Status', render: (r) => <Badge tone={r.status === 'final' ? 'good' : 'warning'}>{r.status === 'final' ? 'Final' : 'Draft'}</Badge>, sort: (r) => r.status },
               { key: 'created', label: 'Date', render: (r) => <span className="whitespace-nowrap text-muted">{dateTimeLabel(r.createdAt)}</span>, sort: (r) => r.createdAt },
             ]}
           />
-        </Card>
-        <Card title="Automatic reports" subtitle="Each one can be switched on or off" action={<CalendarClock size={18} className="text-muted" aria-hidden />}>
-          <div className="flex flex-col gap-4">
-            {(['weekly', 'monthly'] as const).map((kind) => {
-              const s = ws.schedules[kind];
-              return (
-                <div key={kind} className="flex flex-col gap-1">
-                  <Toggle checked={s.enabled} disabled={!can('settings')} onChange={(v) => toggle(kind, v)} label={<b className="font-medium">{kind === 'weekly' ? 'Weekly report' : 'Monthly report'}</b>} />
-                  <p className="pl-[46px] text-[12.5px] text-muted">
-                    {s.enabled ? `Next: ${slotLabel(nextSlot(kind, s, new Date()))}` : 'Off'}
-                    {s.lastRun && <span className="block">Last run: {dateTimeLabel(s.lastRun)}</span>}
-                  </p>
-                </div>
-              );
-            })}
-            <p className="text-[12.5px] text-muted">
-              Auto reports arrive as drafts so you can add the words before sharing. Times, days and recipients are in{' '}
-              <Link to="/settings?tab=reports" className="font-medium text-accent-strong hover:underline">
-                Settings
-              </Link>
-              .
-            </p>
-          </div>
         </Card>
       </div>
       {generating && <GenerateModal onClose={() => setGenerating(false)} />}

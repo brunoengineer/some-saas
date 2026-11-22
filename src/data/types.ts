@@ -41,15 +41,6 @@ export interface Annotation {
   label: string;
 }
 
-export interface ScheduleSetting {
-  enabled: boolean;
-  /** Weekly: 0 = Sunday ... 6 = Saturday. Monthly: day of month 1-28. */
-  day: number;
-  /** 'HH:mm' in the workspace timezone. */
-  time: string;
-  /** ISO datetime of the last run, so the scheduler runs each period once. */
-  lastRun: string | null;
-}
 
 export interface Workspace {
   id: string;
@@ -65,10 +56,8 @@ export interface Workspace {
   /** Pre-publish compliance checklist items. */
   checklist: string[];
   members: Member[];
-  invites: { email: string; role: Role; invitedAt: string }[];
   annotations: Annotation[];
   settings: { managersCanDraft: boolean; managersCanApprove: boolean };
-  schedules: { weekly: ScheduleSetting; monthly: ScheduleSetting; recipients: string[] };
   createdAt: string;
 }
 
@@ -100,6 +89,8 @@ export interface Post {
   metrics: PostMetrics | null;
   /** The post's image: a data URL in the prototype, a Storage URL from Phase 1. Missing means none. */
   image?: string | null;
+  /** A small copy of the image (about 400px) for calendar cards. */
+  thumb?: string | null;
   /** Link to the post once it's live on the platform. */
   postUrl?: string;
   /** Discord only: the channel it goes to, without the #. */

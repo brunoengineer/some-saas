@@ -4,3 +4,9 @@ dist
 *.local
 .env
 .env.*
+!.env.example
+
+# Firebase CLI
+.firebase/
+firebase-debug.log
+firestore-debug.log

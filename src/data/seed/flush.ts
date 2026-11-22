@@ -53,18 +53,12 @@ export const flushWorkspace: Workspace = {
     { id: 'm-priya', name: 'Priya Nair', email: 'priya@flush.example', role: 'viewer', title: 'CRM manager' },
     { id: 'm-tom', name: 'Tom Becker', email: 'tom@flush.example', role: 'viewer', title: 'CTO' },
   ],
-  invites: [{ email: 'support-lead@flush.example', role: 'viewer', invitedAt: '2026-11-18T10:00' }],
   annotations: [
     { date: '2026-10-26', label: 'X goes live' },
     { date: '2026-11-04', label: 'Discord opens' },
     { date: '2026-11-09', label: 'Alpha starts' },
   ],
   settings: { managersCanDraft: false, managersCanApprove: true },
-  schedules: {
-    weekly: { enabled: true, day: 1, time: '08:00', lastRun: '2026-11-16T08:00' },
-    monthly: { enabled: true, day: 1, time: '08:00', lastRun: '2026-11-01T08:00' },
-    recipients: ['alex@flush.example', 'tom@flush.example'],
-  },
   createdAt: '2026-10-19T09:00',
 };
 

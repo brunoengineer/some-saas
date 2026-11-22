@@ -3,6 +3,7 @@ import { BarChart2, Bookmark, Eye, Globe, Heart, MessageCircle, MessageSquare, M
 import { useSession } from '@/app/session';
 import { PlatformIcon, previewPlatform } from '@/components/PlatformIcon';
 import { cx } from '@/components/ui';
+import { usePostImage } from '@/components/usePostImage';
 import type { Platform, PostMetrics } from '@/data/types';
 import { compact, dateTimeLabel, PLATFORM_LABEL, timeOf } from '@/lib/format';
 import { PLATFORM_CROP } from '@/lib/image';
@@ -16,8 +17,10 @@ const DARK: Platform[] = ['tiktok', 'discord', 'kick'];
  * A phone-style preview of the post as it will look on its platform (X when
  * none is chosen yet). Numbers appear once results are entered.
  */
-export function PostPreview({ post }: { post: PostDraft }) {
+export function PostPreview({ post: raw }: { post: PostDraft }) {
   const { ws } = useSession();
+  const image = usePostImage(raw);
+  const post = { ...raw, image };
   const platform = previewPlatform(post.platform);
   const p: Ctx = {
     post,

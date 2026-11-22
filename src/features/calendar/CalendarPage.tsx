@@ -7,6 +7,7 @@ import { useActions } from '@/app/actions';
 import { useMemberName, useSession } from '@/app/session';
 import { DataTable } from '@/components/DataTable';
 import { PlatformIcon } from '@/components/PlatformIcon';
+import { cardImage } from '@/components/usePostImage';
 import { Badge, Button, cx, Dot, IconButton, PageHeader, PlatformBadge, Segmented, Select } from '@/components/ui';
 import type { Post, PostStatus } from '@/data/types';
 import { dateTimeLabel, PLATFORM_LABEL, safeUrl, timeOf } from '@/lib/format';
@@ -331,7 +332,7 @@ function PostChip({ post, compact, thumb, draggable, onOpen }: { post: Post; com
       ) : (
         // Week view, board and ideas: image (week only), then time and platform, then the title on its own lines.
         <>
-          {thumb && post.image && <img src={post.image} alt="" loading="lazy" draggable={false} className="mb-1 aspect-video w-full rounded object-cover" />}
+          {thumb && cardImage(post) && <img src={cardImage(post)!} alt="" loading="lazy" draggable={false} className="mb-1 aspect-video w-full rounded object-cover" />}
           {post.date && (
             <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted">
               <span className="tabular shrink-0">{timeOf(post.date)}</span>

@@ -1,22 +1,21 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
-import { nowStamp, useActions } from '@/app/actions';
+import { useActions } from '@/app/actions';
 import { useMemberName, useSession } from '@/app/session';
-import { Avatar, Badge, Button, Card, cx, Field, IconButton, Input, PageHeader, Segmented, Select, Toggle } from '@/components/ui';
-import { repo } from '@/data/mockRepo';
-import type { Platform, Role, Workspace } from '@/data/types';
+import { Avatar, Button, Card, cx, Field, IconButton, Input, PageHeader, Segmented, Select, Toggle } from '@/components/ui';
+import { repo } from '@/data';
+import type { DB, Member, Platform, Role, Workspace } from '@/data/types';
+import { copyWorkspace, exportWorkspace, parseBackup } from '@/lib/backup';
+import { useAuth } from '@/app/auth';
 import { download } from '@/lib/csv';
 import { dateTimeLabel, PLATFORM_LABEL } from '@/lib/format';
 import { PERMISSION_ROWS, ROLE_HELP, ROLE_LABEL } from '@/lib/permissions';
-import { createReport } from '@/lib/report';
-import { lastSlot, nextSlot, slotLabel } from '@/lib/scheduler';
-import { iso, periodFor } from '@/lib/period';
+import { iso } from '@/lib/period';
 import { ImportPanel } from './ImportPanel';
 
-type Tab = 'workspace' | 'members' | 'reports' | 'import' | 'audit' | 'data';
+type Tab = 'workspace' | 'members' | 'import' | 'audit' | 'data';
 const ALL: Platform[] = ['x', 'instagram', 'tiktok', 'discord', 'telegram', 'youtube', 'linkedin', 'kick'];
-const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 export function SettingsPage() {
   const [params, setParams] = useSearchParams();
@@ -24,7 +23,7 @@ export function SettingsPage() {
   const { can } = useSession();
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title="Settings" subtitle={can('settings') ? 'Workspace, people, automatic reports and data.' : 'Only admins can change settings. You can look around.'} />
+      <PageHeader title="Settings" subtitle={can('settings') ? 'Workspace, people and data.' : 'Only admins can change settings. You can look around.'} />
       <Segmented
         label="Settings section"
         value={tab}
@@ -32,7 +31,6 @@ export function SettingsPage() {
         options={[
           { value: 'workspace', label: 'Workspace' },
           { value: 'members', label: 'Members & roles' },
-          { value: 'reports', label: 'Report schedules' },
           { value: 'import', label: 'Import' },
           { value: 'audit', label: 'Audit log' },
           { value: 'data', label: 'Data' },
@@ -40,7 +38,6 @@ export function SettingsPage() {
       />
       {tab === 'workspace' && <WorkspaceSettings />}
       {tab === 'members' && <Members />}
-      {tab === 'reports' && <Schedules />}
       {tab === 'import' && <ImportPanel />}
       {tab === 'audit' && <Audit />}
       {tab === 'data' && <DataTab />}
@@ -151,9 +148,11 @@ function WorkspaceSettings() {
 }
 
 function Members() {
-  const { ws, can, member } = useSession();
+  const { ws, can, member, user } = useSession();
   const actions = useActions();
   const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
   const [role, setRole] = useState<Role>('viewer');
   const admins = ws.members.filter((m) => m.role === 'admin').length;
   const disabled = !can('settings');
@@ -176,7 +175,8 @@ function Members() {
               <Select
                 aria-label={`Role for ${m.name}`}
                 value={m.role}
-                disabled={disabled || (m.role === 'admin' && admins === 1)}
+                disabled={disabled || (m.role === 'admin' && admins === 1) || (!!user && m.email.toLowerCase() === user.email)}
+                title={user && m.email.toLowerCase() === user.email ? 'Another admin can change your role' : undefined}
                 onChange={(e) => actions.saveWorkspace({ ...ws, members: ws.members.map((x) => (x.id === m.id ? { ...x, role: e.target.value as Role } : x)) }, `${m.name}’s role`)}
                 className="w-32"
               >
@@ -194,35 +194,24 @@ function Members() {
             </li>
           ))}
         </ul>
-        {ws.invites.length > 0 && (
-          <div className="mt-3 flex flex-col gap-1.5">
-            <p className="text-[12px] font-medium tracking-wide text-muted uppercase">Pending invites</p>
-            {ws.invites.map((i) => (
-              <div key={i.email} className="flex items-center gap-2 text-[13.5px]">
-                <span className="min-w-0 flex-1 truncate">{i.email}</span>
-                <Badge>{ROLE_LABEL[i.role]}</Badge>
-                {!disabled && (
-                  <IconButton label={`Cancel invite for ${i.email}`} onClick={() => actions.saveWorkspace({ ...ws, invites: ws.invites.filter((x) => x.email !== i.email) }, `cancelled invite for ${i.email}`)}>
-                    <Trash2 size={15} />
-                  </IconButton>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
         {!disabled && (
           <form
-            className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4"
+            className="mt-4 grid grid-cols-1 gap-2 border-t border-line pt-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_128px_auto]"
             onSubmit={(e) => {
               e.preventDefault();
               const em = email.trim().toLowerCase();
-              if (!/^\S+@\S+\.\S+$/.test(em) || ws.invites.some((i) => i.email === em) || ws.members.some((m) => m.email === em)) return;
-              actions.saveWorkspace({ ...ws, invites: [...ws.invites, { email: em, role, invitedAt: nowStamp() }] }, `invited ${em}`);
+              if (!/^\S+@\S+\.\S+$/.test(em)) return setError('Enter a full email address.');
+              if (ws.members.some((m) => m.email.toLowerCase() === em)) return setError('That email is already a member.');
+              const m: Member = { id: em, name: name.trim() || em.split('@')[0], email: em, role, title: '' };
+              actions.saveWorkspace({ ...ws, members: [...ws.members, m] }, `added ${em} as ${ROLE_LABEL[role].toLowerCase()}`);
               setEmail('');
+              setName('');
+              setError('');
             }}
           >
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" aria-label="Invite email" className="w-auto min-w-[200px] flex-1" />
-            <Select value={role} onChange={(e) => setRole(e.target.value as Role)} aria-label="Invite role" className="w-32">
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" aria-label="New member name" />
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@gmail.com" aria-label="New member email" />
+            <Select value={role} onChange={(e) => setRole(e.target.value as Role)} aria-label="New member role">
               {(['admin', 'manager', 'viewer'] as Role[]).map((r) => (
                 <option key={r} value={r}>
                   {ROLE_LABEL[r]}
@@ -230,9 +219,10 @@ function Members() {
               ))}
             </Select>
             <Button type="submit" variant="primary">
-              Invite
+              Add member
             </Button>
-            <p className="w-full text-[12px] text-muted">They join this workspace the first time they sign in with Google using this email.</p>
+            {error && <p className="text-[12.5px] text-critical-text sm:col-span-4">{error}</p>}
+            <p className="text-[12px] text-muted sm:col-span-4">They get in the first time they sign in with Google using this email. Nothing is emailed to them: send them the link yourself.</p>
           </form>
         )}
       </Card>
@@ -281,109 +271,6 @@ function Members() {
   );
 }
 
-function Schedules() {
-  const { ws, data, can } = useSession();
-  const actions = useActions();
-  const [recipient, setRecipient] = useState('');
-  const disabled = !can('settings');
-  const now = new Date();
-
-  const update = (kind: 'weekly' | 'monthly', patch: Partial<Workspace['schedules']['weekly']>, what: string) => {
-    let s = { ...ws.schedules[kind], ...patch };
-    // Turning on or moving the slot never backfills: start from the next slot.
-    if (patch.enabled || patch.day !== undefined || patch.time !== undefined) {
-      const last = lastSlot(kind, s, now);
-      s = { ...s, lastRun: `${iso(last)}T${s.time}` };
-    }
-    actions.saveWorkspace({ ...ws, schedules: { ...ws.schedules, [kind]: s } }, what);
-  };
-
-  const runNow = (kind: 'weekly' | 'monthly') => {
-    const before = iso(new Date(lastSlot(kind, ws.schedules[kind], now).getTime() - 864e5));
-    const period = periodFor(kind === 'weekly' ? 'week' : 'month', before, ws.weekStartsOn);
-    const r = createReport(data, { type: kind, period, campaignId: null, trigger: 'auto', createdBy: 'scheduler', now: nowStamp() });
-    actions.saveReport(r, `ran the ${kind} schedule by hand:`);
-  };
-
-  return (
-    <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-      {(['weekly', 'monthly'] as const).map((kind) => {
-        const s = ws.schedules[kind];
-        return (
-          <Card key={kind} title={kind === 'weekly' ? 'Weekly report' : 'Monthly report'} subtitle={kind === 'weekly' ? 'Covers the previous full week' : 'Covers the previous calendar month'}>
-            <fieldset disabled={disabled} className="flex flex-col gap-3">
-              <Toggle checked={s.enabled} onChange={(v) => update(kind, { enabled: v }, `${kind} auto report ${v ? 'on' : 'off'}`)} label={s.enabled ? 'On' : 'Off'} />
-              <div className="grid grid-cols-2 gap-3">
-                {kind === 'weekly' ? (
-                  <Field label="Day">
-                    <Select value={s.day} onChange={(e) => update(kind, { day: Number(e.target.value) }, 'weekly report day')}>
-                      {DAYS.map((d, i) => (
-                        <option key={d} value={i}>
-                          {d}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                ) : (
-                  <Field label="Day of month">
-                    <Select value={s.day} onChange={(e) => update(kind, { day: Number(e.target.value) }, 'monthly report day')}>
-                      {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
-                        <option key={d} value={d}>
-                          {d}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                )}
-                <Field label={`Time (${ws.timezone})`}>
-                  <Input type="time" value={s.time} onChange={(e) => e.target.value && update(kind, { time: e.target.value }, `${kind} report time`)} />
-                </Field>
-              </div>
-              <p className="text-[13px] text-soft">
-                {s.enabled ? <>Next run: <b>{slotLabel(nextSlot(kind, s, now))}</b></> : 'Switched off.'}
-                {s.lastRun && <span className="block text-[12.5px] text-muted">Last run: {dateTimeLabel(s.lastRun)}</span>}
-              </p>
-              <div>
-                <Button size="sm" onClick={() => runNow(kind)}>
-                  Run now for the last {kind === 'weekly' ? 'week' : 'month'}
-                </Button>
-              </div>
-            </fieldset>
-          </Card>
-        );
-      })}
-      <Card title="Recipients" subtitle="Get an email with the link when an auto report is ready (Phase 2)." className="xl:col-span-2">
-        <fieldset disabled={disabled} className="flex flex-col gap-2">
-          <div className="flex flex-wrap gap-2">
-            {ws.schedules.recipients.map((r) => (
-              <span key={r} className="inline-flex items-center gap-1 rounded-lg border border-line py-0.5 pr-1 pl-2.5 text-[13px]">
-                {r}
-                <IconButton label={`Remove ${r}`} className="h-6 w-6" onClick={() => actions.saveWorkspace({ ...ws, schedules: { ...ws.schedules, recipients: ws.schedules.recipients.filter((x) => x !== r) } }, 'report recipients')}>
-                  <Trash2 size={13} />
-                </IconButton>
-              </span>
-            ))}
-            {ws.schedules.recipients.length === 0 && <span className="text-[13px] text-muted">No recipients yet.</span>}
-          </div>
-          <form
-            className="flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const em = recipient.trim().toLowerCase();
-              if (!/^\S+@\S+\.\S+$/.test(em) || ws.schedules.recipients.includes(em)) return;
-              actions.saveWorkspace({ ...ws, schedules: { ...ws.schedules, recipients: [...ws.schedules.recipients, em] } }, 'report recipients');
-              setRecipient('');
-            }}
-          >
-            <Input type="email" value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder="name@company.com" aria-label="Recipient email" className="max-w-sm" />
-            <Button type="submit">Add</Button>
-          </form>
-        </fieldset>
-      </Card>
-    </div>
-  );
-}
-
 function Audit() {
   const { data } = useSession();
   const name = useMemberName();
@@ -406,26 +293,130 @@ function Audit() {
 }
 
 function DataTab() {
-  const { db, can } = useSession();
+  const { db, ws, can } = useSession();
+  const { mode } = useAuth();
   return (
     <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-      <Card title="Export" subtitle="Everything in this browser, as JSON. Useful as a backup or to seed Firestore later.">
-        <Button onClick={() => download(`pulse-backup-${iso(new Date())}.json`, JSON.stringify(db, null, 2), 'application/json')}>Download JSON backup</Button>
-      </Card>
-      <Card title="Reset sample data" subtitle="Restores the Flush and Bloom sample workspaces. Your changes in this browser are lost.">
+      <Card title="Export" subtitle={mode === 'firebase' ? 'This workspace, as JSON. A backup you can import again.' : 'Everything in this browser, as JSON. Useful as a backup, or to import into the real app.'}>
         <Button
-          variant="danger"
-          disabled={!can('settings')}
-          onClick={() => {
-            if (window.confirm('Reset all data to the samples? This can’t be undone.')) {
-              repo.reset();
-              window.location.reload();
-            }
-          }}
+          onClick={() =>
+            download(
+              `pulse-${mode === 'firebase' ? ws.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') : 'backup'}-${iso(new Date())}.json`,
+              JSON.stringify(mode === 'firebase' ? exportWorkspace(db, ws.id) : db, null, 2),
+              'application/json',
+            )
+          }
         >
-          Reset to sample data
+          Download JSON backup
         </Button>
       </Card>
+      {mode === 'firebase' ? (
+        <ImportBackup />
+      ) : (
+        <Card title="Reset sample data" subtitle="Restores the Flush and Bloom sample workspaces. Your changes in this browser are lost.">
+          <Button
+            variant="danger"
+            disabled={!can('settings')}
+            onClick={() => {
+              if (window.confirm('Reset all data to the samples? This can’t be undone.')) {
+                repo.reset();
+                window.location.reload();
+              }
+            }}
+          >
+            Reset to sample data
+          </Button>
+        </Card>
+      )}
     </div>
+  );
+}
+
+/** Real app: copy a workspace from a backup file (e.g. the prototype's) into this one. */
+function ImportBackup() {
+  const { ws, can } = useSession();
+  const actions = useActions();
+  const [backup, setBackup] = useState<DB | null>(null);
+  const [source, setSource] = useState('');
+  const [error, setError] = useState('');
+  const [progress, setProgress] = useState('');
+
+  const run = async () => {
+    if (!backup) return;
+    const { ws: next, records, count } = copyWorkspace(backup, source, ws);
+    if (!window.confirm(`Copy ${count.toLocaleString()} records into “${ws.name}”? Its platforms, pillars and checklist are replaced; its name and members stay. Records with the same id are overwritten.`)) return;
+    try {
+      setProgress('Saving the workspace settings…');
+      await repo.upsert('workspaces', next);
+      let done = 0;
+      for (const r of records) {
+        for (let i = 0; i < r.items.length; i += 40) {
+          setProgress(`Saving ${r.collection} (${done.toLocaleString()} of ${count.toLocaleString()})…`);
+          const chunk = r.items.slice(i, i + 40);
+          await repo.upsertMany(r.collection, chunk as never[]);
+          done += chunk.length;
+        }
+      }
+      actions.saveWorkspace(next, `imported ${count} records from a backup`);
+      setProgress(`Done: ${count.toLocaleString()} records copied.`);
+      setBackup(null);
+    } catch {
+      setProgress('Stopped: some records weren’t saved (see the message at the top).');
+    }
+  };
+
+  return (
+    <Card title="Import from a backup" subtitle="Copy a workspace from a Pulse backup file, for example the prototype’s sample data, into this workspace.">
+      <fieldset disabled={!can('settings')} className="flex flex-col gap-3">
+        <input
+          type="file"
+          accept="application/json,.json"
+          aria-label="Backup file"
+          className="text-[13px]"
+          onChange={async (e) => {
+            const f = e.target.files?.[0];
+            setError('');
+            setProgress('');
+            setBackup(null);
+            if (!f) return;
+            try {
+              const b = parseBackup(await f.text());
+              setBackup(b);
+              setSource(b.workspaces[0].id);
+            } catch (err) {
+              setError((err as Error).message);
+            }
+          }}
+        />
+        {error && <p className="text-[13px] text-critical-text">{error}</p>}
+        {backup && (
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="Workspace in the file">
+              <Select value={source} onChange={(e) => setSource(e.target.value)} className="w-auto min-w-[200px]">
+                {backup.workspaces.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Button variant="primary" disabled={source === ws.id} onClick={() => void run()}>
+              Copy into {ws.name}
+            </Button>
+          </div>
+        )}
+        {backup && (
+          <p className="text-[13px] text-soft">
+            {source === ws.id
+              ? 'This file is a backup of this same workspace, so there’s nothing new to copy. Choose the prototype’s backup instead.'
+              : `In the file: ${(['posts', 'campaigns', 'partners', 'kpis'] as const)
+                  .map((c) => `${(backup[c] as { wsId: string }[]).filter((x) => x.wsId === source).length} ${c === 'kpis' ? 'KPIs' : c}`)
+                  .join(', ')}.`}
+          </p>
+        )}
+        {progress && <p className="text-[13px] text-soft" role="status">{progress}</p>}
+        <p className="text-[12px] text-muted">People in the file who aren’t members here show as “Former member”. The free plan allows 20,000 saves a day; the Flush sample needs about 320.</p>
+      </fieldset>
+    </Card>
   );
 }

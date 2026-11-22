@@ -5,7 +5,6 @@ import { wsData } from '@/data/wsData';
 import { kpiValue } from './metrics';
 import { periodFor } from './period';
 import { can, canEditPost } from './permissions';
-import { dueRuns } from './scheduler';
 
 const settings = { managersCanDraft: false, managersCanApprove: true };
 
@@ -43,8 +42,5 @@ describe('second workspace (Bloom)', () => {
     expect(er).not.toBeNull();
     expect(er!).toBeGreaterThan(4);
     expect(kpiValue(d.kpis.find((k) => k.id === 'b-netf')!, d, week).value).toBe(134);
-  });
-  it('respects the weekly schedule being off', () => {
-    expect(dueRuns(d.ws, new Date(2026, 10, 23, 10, 0))).toEqual([]);
   });
 });

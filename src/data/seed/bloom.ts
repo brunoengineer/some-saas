@@ -27,14 +27,8 @@ export const bloomWorkspace: Workspace = {
     { id: 'm-leo', name: 'Leo Martins', email: 'leo@bloom.example', role: 'manager', title: 'Head barista (approves posts)' },
     { id: 'm-dana', name: 'Dana Park', email: 'dana@bloom.example', role: 'viewer', title: 'Owner' },
   ],
-  invites: [],
   annotations: [{ date: '2026-10-05', label: 'Pumpkin season starts' }],
   settings: { managersCanDraft: true, managersCanApprove: true },
-  schedules: {
-    weekly: { enabled: false, day: 1, time: '09:00', lastRun: null },
-    monthly: { enabled: true, day: 1, time: '09:00', lastRun: '2026-11-01T09:00' },
-    recipients: ['dana@bloom.example'],
-  },
   createdAt: '2026-09-28T09:00',
 };
 

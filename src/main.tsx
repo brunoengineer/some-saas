@@ -2,7 +2,9 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createHashRouter, Navigate, RouterProvider } from 'react-router-dom';
 import './index.css';
+import { AuthProvider } from './app/auth';
 import { SessionProvider } from './app/session';
+import { AuthGate } from './features/onboarding/AuthGate';
 import { AppShell } from './layout/AppShell';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { CalendarPage } from './features/calendar/CalendarPage';
@@ -42,8 +44,12 @@ const router = createHashRouter([
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <SessionProvider>
-      <RouterProvider router={router} />
-    </SessionProvider>
+    <AuthProvider>
+      <AuthGate>
+        <SessionProvider>
+          <RouterProvider router={router} />
+        </SessionProvider>
+      </AuthGate>
+    </AuthProvider>
   </StrictMode>,
 );

@@ -6,7 +6,8 @@ import { Comments } from '@/components/Comments';
 import { PlatformIcon, previewPlatform } from '@/components/PlatformIcon';
 import { Badge, Button, cx, Drawer, Field, Input, Segmented, Select, Textarea } from '@/components/ui';
 import type { Platform, Post, PostMetrics } from '@/data/types';
-import { compressImage, PLATFORM_CROP } from '@/lib/image';
+import { usePostImage } from '@/components/usePostImage';
+import { compressImage, makeThumb, PLATFORM_CROP } from '@/lib/image';
 import { num, PLATFORM_LABEL, PLATFORM_LIMIT, safeUrl } from '@/lib/format';
 import { canEditPost } from '@/lib/permissions';
 import { FORMATS, STATUS_LABEL, STATUS_TONE, STATUSES } from './postMeta';
@@ -181,7 +182,7 @@ export function PostDrawer({ post: postIn, isNew, onClose }: { post: PostDraft |
 
         {tab === 'details' && (
           <fieldset disabled={!editable} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <PostImage draft={draft} editable={editable} onChange={(image) => set('image', image)} onPreview={() => setTab('preview')} />
+            <PostImage draft={draft} editable={editable} onChange={(image, thumb) => setDraft({ ...draft, image, thumb })} onPreview={() => setTab('preview')} />
             <Field label="Title (internal)" className="sm:col-span-2">
               <Input value={draft.title} onChange={(e) => set('title', e.target.value)} placeholder="e.g. Poll: what makes you trust a casino?" autoFocus={isNew} />
             </Field>
@@ -400,7 +401,8 @@ function UtmBuilder({ link, onChange, campaign, platform }: { link: string; onCh
  * The post's image at the top of the details, cropped the way its platform
  * crops it (X when no platform is chosen). Drop or pick a file to add one.
  */
-function PostImage({ draft, editable, onChange, onPreview }: { draft: PostDraft; editable: boolean; onChange: (image: string | null) => void; onPreview: () => void }) {
+function PostImage({ draft, editable, onChange, onPreview }: { draft: PostDraft; editable: boolean; onChange: (image: string | null, thumb: string | null) => void; onPreview: () => void }) {
+  const shown = usePostImage(draft);
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -414,7 +416,8 @@ function PostImage({ draft, editable, onChange, onPreview }: { draft: PostDraft;
     setBusy(true);
     setError('');
     try {
-      onChange(await compressImage(file));
+      const full = await compressImage(file);
+      onChange(full, await makeThumb(full));
     } catch (e) {
       setError((e as Error).message || 'Couldn’t read that image.');
     } finally {
@@ -447,7 +450,7 @@ function PostImage({ draft, editable, onChange, onPreview }: { draft: PostDraft;
             className="relative overflow-hidden rounded-lg"
             style={portrait ? { height: 320, aspectRatio: crop.ratio } : { width: '100%', aspectRatio: crop.ratio }}
           >
-            <img src={draft.image} alt={`Image for ${draft.title || 'this post'}`} className="absolute inset-0 h-full w-full object-cover" draggable={false} />
+            {shown ? <img src={shown} alt={`Image for ${draft.title || 'this post'}`} className="absolute inset-0 h-full w-full object-cover" draggable={false} /> : <span className="absolute inset-0 flex items-center justify-center text-[12px] text-muted">Loading image…</span>}
           </button>
         </div>
       ) : (
@@ -473,7 +476,7 @@ function PostImage({ draft, editable, onChange, onPreview }: { draft: PostDraft;
             <Button size="sm" disabled={busy} onClick={() => input.current?.click()}>
               {busy ? 'Preparing…' : 'Replace'}
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => onChange(null)}>
+            <Button size="sm" variant="ghost" onClick={() => onChange(null, null)}>
               Remove
             </Button>
           </span>

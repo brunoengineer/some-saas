@@ -1,0 +1,101 @@
+rules_version = '2';
+
+// Pulse security rules: the same permissions as src/lib/permissions.ts, enforced by Firestore.
+// Publish with:  npx firebase-tools deploy --only firestore:rules
+// Layout:
+//   meta/owners                         { emails: [...] }  may create workspaces
+//   workspaces/{wsId}                   the workspace + memberEmails / admins / managers / viewers
+//   workspaces/{wsId}/{collection}/{id} posts, campaigns, partners, deliverables, kpis, kpiEntries,
+//                                       stats, comments, reports, activity, images
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    function email() {
+      return request.auth.token.email.lower();
+    }
+    function ownersDoc() {
+      return /databases/$(database)/documents/meta/owners;
+    }
+    function isOwner() {
+      return signedIn() && exists(ownersDoc()) && email() in get(ownersDoc()).data.emails;
+    }
+    function ws(wsId) {
+      return get(/databases/$(database)/documents/workspaces/$(wsId)).data;
+    }
+    function isMember(wsId) {
+      return signedIn() && email() in ws(wsId).memberEmails;
+    }
+    function isAdmin(wsId) {
+      return signedIn() && email() in ws(wsId).admins;
+    }
+    function isManager(wsId) {
+      return signedIn() && email() in ws(wsId).managers;
+    }
+
+    // Who owns this installation. The very first person to sign in claims it;
+    // after that only owners can change the list.
+    match /meta/owners {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.emails == [email()];
+      allow update: if isOwner() && email() in request.resource.data.emails;
+    }
+
+    match /workspaces/{wsId} {
+      allow read: if signedIn() && email() in resource.data.memberEmails;
+      // Owners create workspaces and must be an admin of them.
+      allow create: if isOwner()
+        && request.resource.data.id == wsId
+        && email() in request.resource.data.admins
+        && email() in request.resource.data.memberEmails;
+      // Admins change settings and members, but can't remove their own admin role.
+      allow update: if isAdmin(wsId)
+        && request.resource.data.id == wsId
+        && email() in request.resource.data.admins
+        && email() in request.resource.data.memberEmails;
+      allow delete: if isAdmin(wsId);
+
+      match /{coll}/{docId} {
+        function sameWs() {
+          return request.resource.data.wsId == wsId && request.resource.data.id == docId;
+        }
+        function settings() {
+          return ws(wsId).settings;
+        }
+
+        allow read: if isMember(wsId);
+
+        // Admins: everything in their workspace.
+        allow create, update: if isAdmin(wsId) && (coll == 'images' ? request.resource.data.wsId == wsId : sameWs());
+        allow delete: if isAdmin(wsId);
+
+        // Managers: comment as themselves, and edit or delete only their own comments.
+        allow create: if isManager(wsId) && coll == 'comments' && sameWs() && request.resource.data.authorId == email();
+        allow update: if isManager(wsId) && coll == 'comments' && sameWs()
+          && resource.data.authorId == email() && request.resource.data.authorId == email();
+        allow delete: if isManager(wsId) && coll == 'comments' && resource.data.authorId == email();
+
+        // Managers: their own entries in the activity log.
+        allow create: if isManager(wsId) && coll == 'activity' && sameWs() && request.resource.data.actorId == email();
+
+        // Managers, if allowed: create and edit ideas and drafts (and send them for review).
+        allow create, update: if isManager(wsId) && settings().managersCanDraft && coll == 'posts' && sameWs()
+          && request.resource.data.status in ['idea', 'draft', 'review']
+          && (resource == null || resource.data.status in ['idea', 'draft']);
+        allow create, update: if isManager(wsId) && settings().managersCanDraft && coll == 'images'
+          && request.resource.data.wsId == wsId;
+
+        // Managers, if allowed: approve a post in review, or send it back to draft. Status only.
+        allow update: if isManager(wsId) && settings().managersCanApprove && coll == 'posts'
+          && resource.data.status == 'review'
+          && request.resource.data.status in ['approved', 'draft']
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+
+        // Viewers: read only (covered by the read rule above).
+      }
+    }
+  }
+}

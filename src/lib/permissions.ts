@@ -48,5 +48,5 @@ export const PERMISSION_ROWS: { label: string; admin: string; manager: string; v
   { label: 'Edit campaigns, partners, KPIs and results', admin: '✓', manager: '–', viewer: '–' },
   { label: 'Generate and edit reports', admin: '✓', manager: '–', viewer: '–' },
   { label: 'Export reports (PPTX, PDF)', admin: '✓', manager: '✓', viewer: '✓' },
-  { label: 'Members, roles, schedules and settings', admin: '✓', manager: '–', viewer: '–' },
+  { label: 'Members, roles and settings', admin: '✓', manager: '–', viewer: '–' },
 ];

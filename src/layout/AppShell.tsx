@@ -8,6 +8,7 @@ import {
   ChevronsUpDown,
   FileText,
   Flag,
+  LogOut,
   Layers,
   Handshake,
   LayoutDashboard,
@@ -19,13 +20,15 @@ import {
   Settings,
   Sun,
 } from 'lucide-react';
-import { newId, useActions } from '@/app/actions';
+import { useAuth } from '@/app/auth';
 import { useMemberName, useSession, type ThemePref } from '@/app/session';
-import type { Kpi, Platform, Role, Workspace } from '@/data/types';
-import { dateTimeLabel, PLATFORM_LABEL } from '@/lib/format';
+import type { Role, Workspace } from '@/data/types';
+import { dateTimeLabel } from '@/lib/format';
 import { ROLE_HELP, ROLE_LABEL } from '@/lib/permissions';
-import { Avatar, Button, cx, Field, IconButton, Input, Modal, useClickOutside } from '@/components/ui';
+import { Avatar, Button, cx, IconButton, Modal, useClickOutside } from '@/components/ui';
 import { STORAGE_FULL_EVENT } from '@/data/mockRepo';
+import { WRITE_ERROR_EVENT } from '@/data/repo';
+import { NewWorkspaceForm } from '@/features/onboarding/NewWorkspaceForm';
 import { CommandPalette } from './CommandPalette';
 
 const NAV = [
@@ -62,6 +65,7 @@ export function AppShell() {
         <Topbar onMenu={() => setMenuOpen(true)} onSearch={() => setPaletteOpen(true)} />
         <main className="app-main mx-auto w-full max-w-[1400px] px-4 py-5 sm:px-6 lg:px-8">
           <StorageWarning />
+          <WriteErrors />
           <Outlet />
         </main>
       </div>
@@ -91,6 +95,29 @@ function StorageWarning() {
   );
 }
 
+/** Changes Firestore refused (role, free-plan limit, size). Each message stays until dismissed. */
+function WriteErrors() {
+  const [errors, setErrors] = useState<string[]>([]);
+  useEffect(() => {
+    const on = (e: Event) => setErrors((xs) => (xs.includes((e as CustomEvent<string>).detail) ? xs : [...xs, (e as CustomEvent<string>).detail].slice(-3)));
+    window.addEventListener(WRITE_ERROR_EVENT, on);
+    return () => window.removeEventListener(WRITE_ERROR_EVENT, on);
+  }, []);
+  if (!errors.length) return null;
+  return (
+    <div role="alert" className="no-print mb-4 flex flex-col gap-2 rounded-xl border border-[color-mix(in_srgb,var(--critical)_40%,transparent)] bg-[color-mix(in_srgb,var(--critical)_8%,transparent)] px-4 py-3 text-[13.5px]">
+      {errors.map((m) => (
+        <span key={m} className="flex flex-wrap items-center gap-3">
+          <span className="min-w-0 flex-1">{m}</span>
+          <Button size="sm" onClick={() => setErrors((xs) => xs.filter((x) => x !== m))}>
+            Dismiss
+          </Button>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
     <>
@@ -109,14 +136,22 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
           ))}
           <div className="mt-auto pt-3">
             <NavItem to="/settings" label="Settings" icon={Settings} />
-            <p className="mt-3 rounded-lg bg-surface-2 px-3 py-2 text-[12px] leading-snug text-muted">
-              <b className="block font-semibold text-soft">Prototype</b>
-              Sample data, saved in this browser only.
-            </p>
+            <ModeNote />
           </div>
         </div>
       </nav>
     </>
+  );
+}
+
+function ModeNote() {
+  const { mode } = useAuth();
+  if (mode === 'firebase') return null;
+  return (
+    <p className="mt-3 rounded-lg bg-surface-2 px-3 py-2 text-[12px] leading-snug text-muted">
+      <b className="block font-semibold text-soft">Prototype</b>
+      Sample data, saved in this browser only.
+    </p>
   );
 }
 
@@ -151,6 +186,7 @@ function WsMark({ ws, size = 32 }: { ws: Pick<Workspace, 'initials' | 'accent'>;
 
 function WorkspaceSwitcher() {
   const { db, ws, setWsId } = useSession();
+  const { isOwner } = useAuth();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const close = useCallback(() => setOpen(false), []);
@@ -193,6 +229,7 @@ function WorkspaceSwitcher() {
               {w.id === ws.id && <Check size={15} className="text-accent" aria-hidden />}
             </button>
           ))}
+          {isOwner && (
           <button
             role="menuitem"
             type="button"
@@ -204,6 +241,7 @@ function WorkspaceSwitcher() {
           >
             <Plus size={16} aria-hidden /> New workspace (client)
           </button>
+          )}
         </div>
       )}
       <NewWorkspaceModal open={creating} onClose={() => setCreating(false)} />
@@ -211,122 +249,25 @@ function WorkspaceSwitcher() {
   );
 }
 
-const ACCENTS = ['#2563EB', '#EC001F', '#0F766E', '#7C3AED', '#EA580C', '#0891B2', '#DB2777', '#18181B'];
-const ALL_PLATFORMS: Platform[] = ['x', 'instagram', 'tiktok', 'discord', 'telegram', 'youtube', 'linkedin', 'kick'];
-
 function NewWorkspaceModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { member, setWsId } = useSession();
-  const actions = useActions();
   const navigate = useNavigate();
-  const [name, setName] = useState('');
-  const [accent, setAccent] = useState(ACCENTS[0]);
-  const [platforms, setPlatforms] = useState<Platform[]>(['instagram']);
-
-  const create = () => {
-    const id = newId('ws');
-    const now = new Date().toISOString().slice(0, 16);
-    const ws: Workspace = {
-      id,
-      name: name.trim(),
-      tagline: 'Client workspace',
-      initials: name.trim().charAt(0).toUpperCase(),
-      accent,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      weekStartsOn: 1,
-      platforms,
-      pillars: [
-        { id: 'educate', name: 'Educate', color: 1, targetShare: 35 },
-        { id: 'entertain', name: 'Entertain', color: 2, targetShare: 30 },
-        { id: 'community', name: 'Community', color: 3, targetShare: 20 },
-        { id: 'promote', name: 'Promote', color: 4, targetShare: 15 },
-      ],
-      checklist: ['Brand voice checked', 'Alt text added', 'Paid partnership labelled (#ad)'],
-      members: [{ ...member, role: 'admin' }],
-      invites: [],
-      annotations: [],
-      settings: { managersCanDraft: false, managersCanApprove: true },
-      schedules: {
-        weekly: { enabled: true, day: 1, time: '08:00', lastRun: now },
-        monthly: { enabled: true, day: 1, time: '08:00', lastRun: now },
-        recipients: [],
-      },
-      createdAt: now,
-    };
-    const p = platforms[0] ?? null;
-    const base = { wsId: id, direction: 'up' as const, cadence: 'weekly' as const, phase: 'Ongoing', aggregate: 'sum' as const, platform: p };
-    const target = (value: number | null, comparator: 'gte' | 'growth') => [{ from: now.slice(0, 10), value, comparator, by: null, note: '' }];
-    const kpis: Kpi[] = [
-      { ...base, id: `${id}-er`, name: 'Engagement rate', question: 'Is our content working?', unit: 'percent', group: 'weekly', source: 'calc', calc: 'engagementRate', aggregate: 'avg', order: 1, targets: target(3, 'gte') },
-      { ...base, id: `${id}-netf`, name: 'Net new followers', question: 'Is our reach growing?', unit: 'number', group: 'weekly', source: 'calc', calc: 'netFollowers', order: 2, targets: target(null, 'growth') },
-      { ...base, id: `${id}-clicks`, name: 'Link clicks', question: 'Are we sending people somewhere?', unit: 'number', group: 'weekly', source: 'calc', calc: 'profileClicks', order: 3, targets: target(null, 'growth') },
-      { ...base, id: `${id}-posts`, name: 'Posts published', question: 'Are we keeping the rhythm?', unit: 'number', platform: null, group: 'other', source: 'calc', calc: 'postsPublished', order: 4, targets: [] },
-    ];
-    actions.createWorkspace(ws, kpis);
-    setWsId(id);
-    onClose();
-    setName('');
-    navigate('/settings');
-  };
-
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="New workspace"
-      footer={
-        <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={!name.trim() || !platforms.length} onClick={create}>
-            Create workspace
-          </Button>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-4">
-        <p className="text-[13px] text-muted">One workspace per brand or client. Posts, KPIs, partners and members are kept separate. It starts with four standard KPIs you can change.</p>
-        <Field label="Name">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Bloom Coffee Co." autoFocus />
-        </Field>
-        <Field label="Accent color">
-          <div className="flex flex-wrap gap-2">
-            {ACCENTS.map((a) => (
-              <button
-                key={a}
-                type="button"
-                aria-label={`Accent ${a}`}
-                aria-pressed={a === accent}
-                onClick={() => setAccent(a)}
-                className={cx('h-8 w-8 rounded-lg ring-offset-2 ring-offset-surface', a === accent && 'ring-2 ring-fg')}
-                style={{ background: a }}
-              />
-            ))}
-          </div>
-        </Field>
-        <Field label="Platforms">
-          <div className="flex flex-wrap gap-2">
-            {ALL_PLATFORMS.map((p) => {
-              const on = platforms.includes(p);
-              return (
-                <button
-                  key={p}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => setPlatforms(on ? platforms.filter((x) => x !== p) : [...platforms, p])}
-                  className={cx('rounded-lg border px-2.5 py-1 text-[13px]', on ? 'border-accent bg-accent-soft text-accent-strong' : 'border-line text-soft')}
-                >
-                  {PLATFORM_LABEL[p]}
-                </button>
-              );
-            })}
-          </div>
-        </Field>
-      </div>
+    <Modal open={open} onClose={onClose} title="New workspace">
+      <NewWorkspaceForm
+        admin={member}
+        onCancel={onClose}
+        onCreated={(id) => {
+          setWsId(id);
+          onClose();
+          navigate('/settings');
+        }}
+      />
     </Modal>
   );
 }
 
 function Topbar({ onMenu, onSearch }: { onMenu: () => void; onSearch: () => void }) {
-  const { member } = useSession();
   return (
     <header className="no-print sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-line bg-[color-mix(in_srgb,var(--bg)_88%,transparent)] px-3 backdrop-blur sm:px-5">
       <IconButton label="Open menu" onClick={onMenu} className="lg:hidden">
@@ -345,19 +286,55 @@ function Topbar({ onMenu, onSearch }: { onMenu: () => void; onSearch: () => void
         <RoleSwitcher />
         <Notifications />
         <ThemeMenu />
-        <span className="ml-1 hidden items-center gap-2 sm:flex" title={`${member.name} · ${member.title}`}>
-          <Avatar name={member.name} size={30} />
-        </span>
+        <AccountMenu />
       </div>
     </header>
   );
 }
 
-function RoleSwitcher() {
-  const { role, setRole, member } = useSession();
+function AccountMenu() {
+  const { member, realRole } = useSession();
+  const auth = useAuth();
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   const ref = useClickOutside<HTMLDivElement>(close, open);
+  if (auth.mode === 'prototype') {
+    return (
+      <span className="ml-1 hidden items-center gap-2 sm:flex" title={`${member.name} · ${member.title}`}>
+        <Avatar name={member.name} size={30} />
+      </span>
+    );
+  }
+  return (
+    <div ref={ref} className="relative ml-1">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} aria-label="Your account" className="flex rounded-full">
+        {auth.user?.photo ? <img src={auth.user.photo} alt="" referrerPolicy="no-referrer" className="h-[30px] w-[30px] rounded-full" /> : <Avatar name={member.name} size={30} />}
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 z-50 mt-1 w-64 rounded-xl border border-line bg-surface p-1.5 shadow-xl">
+          <div className="px-2 py-1.5">
+            <b className="block truncate text-[13.5px] font-semibold">{member.name}</b>
+            <span className="block truncate text-[12px] text-muted">{auth.user?.email}</span>
+            <span className="block text-[12px] text-muted">{ROLE_LABEL[realRole]} in this workspace</span>
+          </div>
+          <button role="menuitem" type="button" onClick={() => void auth.signOut()} className="mt-1 flex w-full items-center gap-2 rounded-lg border-t border-line px-2 py-2 text-left text-[13.5px] text-soft hover:bg-surface-2">
+            <LogOut size={15} aria-hidden /> Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RoleSwitcher() {
+  const { role, setRole, member, realRole } = useSession();
+  const { mode } = useAuth();
+  const RANK: Record<Role, number> = { admin: 0, manager: 1, viewer: 2 };
+  const roles = (['admin', 'manager', 'viewer'] as Role[]).filter((r) => RANK[r] >= RANK[realRole]);
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  const ref = useClickOutside<HTMLDivElement>(close, open);
+  if (roles.length < 2) return null;
   return (
     <div ref={ref} className="relative">
       <button
@@ -374,8 +351,10 @@ function RoleSwitcher() {
       </button>
       {open && (
         <div role="menu" className="absolute right-0 z-50 mt-1 w-72 rounded-xl border border-line bg-surface p-1.5 shadow-xl">
-          <p className="px-2 py-1 text-[12px] text-muted">Prototype only: preview permissions. Now acting as {member.name}.</p>
-          {(['admin', 'manager', 'viewer'] as Role[]).map((r) => (
+          <p className="px-2 py-1 text-[12px] text-muted">
+            {mode === 'prototype' ? `Prototype: preview permissions. Now acting as ${member.name}.` : 'See the app as a lower role would. Your real role doesn’t change.'}
+          </p>
+          {roles.map((r) => (
             <button
               key={r}
               role="menuitemradio"
