@@ -111,3 +111,31 @@ describe('pillar stats', () => {
     expect(fun.top!.metrics!.engagements / fun.top!.metrics!.impressions).toBe(best);
   });
 });
+
+describe('Discord sync KPIs', () => {
+  const stat = (date: string, extra: Record<string, number | null>) => ({ id: `s-${date}`, wsId: FLUSH, platform: 'discord' as const, date, followers: null, members: null, clicks: {}, joins: {}, leaves: 0, profileVisits: 0, messages: 0, ...extra });
+  const synced = {
+    ...d,
+    stats: [
+      ...d.stats.filter((s) => s.platform !== 'discord'),
+      stat('2026-11-22', { members: 400, active7: 100 }),
+      stat('2026-11-23', { members: 410, active7: 123 }),
+      stat('2026-11-24', { members: 412 }),
+      // Joined on the 17th and 18th; measured a week later.
+      stat('2026-11-17', { members: 380, cohortSize: 10, retained7: 7 }),
+      stat('2026-11-18', { members: 390, cohortSize: 10, retained7: 5 }),
+      stat('2026-11-10', { members: 300, cohortSize: 50, retained7: 0 }),
+    ],
+  };
+  const week = periodFor('week', '2026-11-24', 1);
+
+  it('weekly active % uses the last day with both numbers', () => {
+    expect(calcValue('activeShare', synced, week, NO_FILTERS, 'discord')).toBe(30);
+  });
+
+  it('7-day retention counts newcomers whose 7th day fell in the period', () => {
+    expect(week).toMatchObject({ start: '2026-11-23', end: '2026-11-29' });
+    // Cohorts from 16-22 Nov: the 17th and 18th (12 of 20).
+    expect(calcValue('retention7', synced, week, NO_FILTERS, 'discord')).toBe(60);
+  });
+});

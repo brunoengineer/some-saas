@@ -5,6 +5,12 @@ dist
 .env
 .env.*
 !.env.example
+!.env.sync.example
+
+# Firebase service-account keys (the sync script's password: never commit)
+service-account*.json
+*-firebase-adminsdk-*.json
+secrets/
 
 # Firebase CLI
 .firebase/

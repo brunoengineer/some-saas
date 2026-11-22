@@ -59,6 +59,7 @@ export interface Workspace {
   annotations: Annotation[];
   settings: { managersCanDraft: boolean; managersCanApprove: boolean };
   createdAt: string;
+  integrations?: Integrations;
 }
 
 export interface PostMetrics {
@@ -179,6 +180,8 @@ export type KpiGroup = 'weekly' | 'daily' | 'headline' | 'other';
 /** Calculated KPIs read from posts, channel stats or partner deliverables. */
 export type CalcKey =
   | 'engagementRate'
+  | 'activeShare'
+  | 'retention7'
   | 'netFollowers'
   | 'followers'
   | 'impressions'
@@ -265,6 +268,42 @@ export interface DailyStat {
   leaves: number;
   profileVisits: number;
   messages: number;
+  /** Discord sync: people who posted that day. */
+  active?: number | null;
+  /** Discord sync: people who posted in the 7 days ending that day. */
+  active7?: number | null;
+  /** Discord sync: members online when it ran. */
+  online?: number | null;
+  /** Discord sync: people who joined that day (seen live). */
+  cohortSize?: number | null;
+  /** Discord sync: of those, how many were still in the server 7 days later. */
+  retained7?: number | null;
+}
+
+/** Where a workspace's numbers can be fetched from automatically (see docs/discord.md). */
+export interface Integrations {
+  discord?: {
+    /** The Discord server id (right-click the server → Copy Server ID). */
+    guildId: string;
+    /** Invite code → the source name shown in Pulse. Partners' tracking links are added automatically. */
+    labels: Record<string, string>;
+  };
+}
+
+/** `workspaces/{id}/sync/state`: the Update button asks, the sync script answers. */
+export interface SyncState {
+  id: 'state';
+  wsId: string;
+  status: 'idle' | 'requested' | 'running' | 'done' | 'error';
+  requestedAt?: string | null;
+  requestedBy?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  /** What the last run did, or what went wrong. */
+  message?: string;
+  /** The sync script checks in every few minutes while it runs in watch mode. */
+  runnerSeenAt?: string | null;
+  runner?: string | null;
 }
 
 export type CommentTarget = 'post' | 'campaign' | 'report' | 'partner';

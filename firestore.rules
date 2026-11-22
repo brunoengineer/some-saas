@@ -6,7 +6,9 @@ rules_version = '2';
 //   meta/owners                         { emails: [...] }  may create workspaces
 //   workspaces/{wsId}                   the workspace + memberEmails / admins / managers / viewers
 //   workspaces/{wsId}/{collection}/{id} posts, campaigns, partners, deliverables, kpis, kpiEntries,
-//                                       stats, comments, reports, activity, images
+//                                       stats, comments, reports, activity, images, sync
+//   integrationState/{id}               the sync script's memory (member ids): no app access at all,
+//                                       only the script's service account (which skips these rules)
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -93,6 +95,14 @@ service cloud.firestore {
           && resource.data.status == 'review'
           && request.resource.data.status in ['approved', 'draft']
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+
+        // Managers: press "Update data" (ask the sync script to run). Only the request fields.
+        allow create: if isManager(wsId) && coll == 'sync' && docId == 'state' && sameWs()
+          && request.resource.data.keys().hasOnly(['id', 'wsId', 'status', 'requestedAt', 'requestedBy'])
+          && request.resource.data.status == 'requested' && request.resource.data.requestedBy == email();
+        allow update: if isManager(wsId) && coll == 'sync' && docId == 'state'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'requestedAt', 'requestedBy'])
+          && request.resource.data.status == 'requested' && request.resource.data.requestedBy == email();
 
         // Viewers: read only (covered by the read rule above).
       }

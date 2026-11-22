@@ -13,8 +13,9 @@ import { dateTimeLabel, PLATFORM_LABEL } from '@/lib/format';
 import { PERMISSION_ROWS, ROLE_HELP, ROLE_LABEL } from '@/lib/permissions';
 import { iso } from '@/lib/period';
 import { ImportPanel } from './ImportPanel';
+import { IntegrationsTab } from './IntegrationsTab';
 
-type Tab = 'workspace' | 'members' | 'import' | 'audit' | 'data';
+type Tab = 'workspace' | 'members' | 'integrations' | 'import' | 'audit' | 'data';
 const ALL: Platform[] = ['x', 'instagram', 'tiktok', 'discord', 'telegram', 'youtube', 'linkedin', 'kick'];
 
 export function SettingsPage() {
@@ -31,6 +32,7 @@ export function SettingsPage() {
         options={[
           { value: 'workspace', label: 'Workspace' },
           { value: 'members', label: 'Members & roles' },
+          { value: 'integrations', label: 'Integrations' },
           { value: 'import', label: 'Import' },
           { value: 'audit', label: 'Audit log' },
           { value: 'data', label: 'Data' },
@@ -38,6 +40,7 @@ export function SettingsPage() {
       />
       {tab === 'workspace' && <WorkspaceSettings />}
       {tab === 'members' && <Members />}
+      {tab === 'integrations' && <IntegrationsTab />}
       {tab === 'import' && <ImportPanel />}
       {tab === 'audit' && <Audit />}
       {tab === 'data' && <DataTab />}

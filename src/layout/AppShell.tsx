@@ -29,6 +29,7 @@ import { Avatar, Button, cx, IconButton, Modal, useClickOutside } from '@/compon
 import { STORAGE_FULL_EVENT } from '@/data/mockRepo';
 import { WRITE_ERROR_EVENT } from '@/data/repo';
 import { NewWorkspaceForm } from '@/features/onboarding/NewWorkspaceForm';
+import { SyncButton } from '@/features/sync/SyncButton';
 import { CommandPalette } from './CommandPalette';
 
 const NAV = [
@@ -135,6 +136,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
             <NavItem key={n.to} {...n} />
           ))}
           <div className="mt-auto pt-3">
+            <SyncButton />
             <NavItem to="/settings" label="Settings" icon={Settings} />
             <ModeNote />
           </div>

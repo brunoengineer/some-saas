@@ -6,12 +6,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && tsc -p tsconfig.scripts.json && vite build",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json",
     "test": "vitest run",
     "preview": "vite preview",
     "deploy": "npm run build && firebase deploy --only hosting,firestore",
-    "deploy:rules": "firebase deploy --only firestore:rules"
+    "deploy:rules": "firebase deploy --only firestore:rules",
+    "sync": "node --env-file-if-exists=.env.sync scripts/sync/index.ts",
+    "sync:watch": "node --env-file-if-exists=.env.sync scripts/sync/index.ts --watch"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -30,6 +32,7 @@
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.7.0",
+    "firebase-admin": "14.5.0",
     "tailwindcss": "^4.3.5",
     "typescript": "^5.9.3",
     "vite": "^6.4.6",

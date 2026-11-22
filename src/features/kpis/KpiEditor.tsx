@@ -42,6 +42,8 @@ const TEMPLATES: { label: string; kpi: Partial<Kpi> }[] = [
   { label: 'Median reply time (by hand)', kpi: { name: 'Median reply time', question: 'Do we answer fast?', unit: 'minutes', direction: 'down', source: 'manual', aggregate: 'avg', cadence: 'daily', group: 'daily' } },
   { label: 'Video views (by hand)', kpi: { name: 'Video views', question: 'Do people watch?', unit: 'number', source: 'manual', aggregate: 'sum' } },
   { label: 'Saves (by hand)', kpi: { name: 'Saves', question: 'Is it worth keeping?', unit: 'number', source: 'manual', aggregate: 'sum' } },
+  { label: 'Weekly active members % (Discord sync)', kpi: { name: 'Weekly active members', question: 'Is the community alive?', unit: 'percent', platform: 'discord', source: 'calc', calc: 'activeShare', aggregate: 'avg' } },
+  { label: '7-day retention (Discord sync)', kpi: { name: '7-day retention', question: 'Do newcomers stick?', unit: 'percent', platform: 'discord', source: 'calc', calc: 'retention7', aggregate: 'avg' } },
   { label: 'Weekly active members % (by hand)', kpi: { name: 'Weekly active members', question: 'Is the community alive?', unit: 'percent', source: 'manual', aggregate: 'avg' } },
 ];
 

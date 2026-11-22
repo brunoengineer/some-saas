@@ -46,6 +46,8 @@ export const SCOPED: Record<CalcKey, boolean> = {
   partnerViews: true,
   partnerCost: true,
   costPerMember: true,
+  activeShare: false,
+  retention7: false,
 };
 
 export const CALC_LABEL: Record<CalcKey, string> = {
@@ -65,6 +67,8 @@ export const CALC_LABEL: Record<CalcKey, string> = {
   partnerViews: 'Views on delivered partner content',
   partnerCost: 'Cost of partner deliverables delivered',
   costPerMember: 'Partner cost ÷ new members they brought',
+  activeShare: 'Members who posted in the last 7 days ÷ members (Discord sync)',
+  retention7: 'Newcomers still in the server 7 days after joining (Discord sync)',
 };
 
 /** Paused KPIs keep their history but are left out of the overview, the dashboard and new reports. */
@@ -121,7 +125,7 @@ function channelFor(d: WsData, key: CalcKey): Platform | null {
     d.ws.platforms.find((pl) =>
       d.stats.some((s) => s.platform === pl && (field === 'joins' || field === 'clicks' ? Object.keys(s[field]).length > 0 : s[field] !== null)),
     ) ?? null;
-  if (key === 'members' || key === 'newMembers') return withField('members');
+  if (key === 'members' || key === 'newMembers' || key === 'activeShare' || key === 'retention7') return withField('members');
   if (key === 'profileClicks') return withField('clicks');
   return withField('followers');
 }
@@ -171,6 +175,27 @@ export function calcValue(key: CalcKey, d: WsData, p: Period, f: Filters, platfo
       const st = statsOf(d, channel).filter((s) => inPeriod(s.date, p));
       if (!st.length) return null;
       return sum(st.map((s) => sum(Object.values(s.joins))));
+    }
+    case 'activeShare': {
+      // The last day of the period that has both numbers.
+      if (!channel) return null;
+      const st = statsOf(d, channel)
+        .filter((s) => inPeriod(s.date, p) && s.active7 != null)
+        .sort((a, b) => b.date.localeCompare(a.date));
+      for (const s of st) {
+        const members = s.members ?? lastValue(statsOf(d, channel), 'members', s.date);
+        if (members) return (s.active7! / members) * 100;
+      }
+      return null;
+    }
+    case 'retention7': {
+      // Newcomers whose 7th day fell in the period.
+      if (!channel) return null;
+      const from = addDaysIso(p.start, -7);
+      const to = addDaysIso(p.end, -7);
+      const st = statsOf(d, channel).filter((s) => s.date >= from && s.date <= to && s.retained7 != null && s.cohortSize);
+      const joined = sum(st.map((s) => s.cohortSize!));
+      return joined ? (sum(st.map((s) => s.retained7!)) / joined) * 100 : null;
     }
     case 'engagements':
       return sum(publishedIn(d, p, f, platform).map((x) => x.metrics!.engagements));
